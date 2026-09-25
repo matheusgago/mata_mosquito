@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mata Mosquito - Controlado por Gestos</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- MediaPipe Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800;900&display=swap');
+
+    body {
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+      background: #0f172a url('imagens/fundo.png') no-repeat center center fixed;
+      background-size: cover;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+
+    .glow-card {
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(16, 185, 129, 0.15);
+    }
+
+    .glow-btn {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glow-emerald { box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.4); }
+    .glow-amber { box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.4); }
+    .glow-rose { box-shadow: 0 0 25px -5px rgba(244, 63, 94, 0.4); }
+
+    .heart-drop-shadow {
+      filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.8));
+    }
+
+    .img-mosquito {
+      position: absolute;
+      width: 95px;
+      height: 95px;
+      cursor: pointer;
+      z-index: 20;
+      transition: transform 0.05s ease-out;
+      filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
+    }
+
+    #virtual-cursor {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      border: 3px solid #10b981;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.25);
+      backdrop-filter: blur(2px);
+      pointer-events: none;
+      z-index: 50;
+      transform: translate(-50%, -50%);
+      transition: background-color 0.05s, transform 0.05s, border-color 0.05s;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.6);
+    }
+
+    #virtual-cursor.clicking {
+      background: rgba(244, 63, 94, 0.6);
+      border-color: #f43f5e;
+      box-shadow: 0 0 25px rgba(244, 63, 94, 0.9);
+      transform: translate(-50%, -50%) scale(0.7);
+    }
+
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 10px; }
+  </style>
+</head>
+<body class="w-screen h-screen relative text-white antialiased">
+
+  <video id="webcam" class="hidden" autoplay playsinline muted></video>
+  <div id="virtual-cursor" class="hidden"></div>
+
+  <!-- HUD SUPERIOR -->
+  <header id="hud" class="hidden absolute top-6 left-1/2 -translate-x-1/2 w-11/12 max-w-4xl bg-slate-900/80 border border-slate-700/60 backdrop-blur-2xl rounded-3xl p-3 flex items-center justify-between z-30 shadow-2xl">
+    <div class="flex items-center gap-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl px-4 py-2.5 glow-emerald">
+      <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+        <i class="fa-solid fa-crosshairs text-lg"></i>
+      </div>
+      <div>
+        <span class="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest block">Caçador</span>
+        <span id="hud-nickname" class="text-base font-black text-white tracking-wide block leading-tight">---</span>
+      </div>
+    </div>
+
+    <div class="flex flex-col items-center justify-center bg-slate-950/80 border border-slate-800/80 rounded-2xl px-6 py-2.5 glow-rose">
+      <span class="text-[10px] font-extrabold text-rose-400 uppercase tracking-widest mb-1">Vidas</span>
+      <div class="flex items-center gap-2 text-rose-500 text-xl" id="hud-lives">
+        <i class="fa-solid fa-heart heart-drop-shadow"></i>
+        <i class="fa-solid fa-heart heart-drop-shadow"></i>
+        <i class="fa-solid fa-heart heart-drop-shadow"></i>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 bg-slate-950/80 border border-slate-800/80 rounded-2xl px-5 py-2.5 glow-amber">
+      <div class="text-right">
+        <span class="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block leading-none mb-1">Pontos</span>
+        <span id="hud-score" class="text-2xl font-black text-amber-400 tracking-tight">0</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+        <i class="fa-solid fa-trophy text-lg"></i>
+      </div>
+    </div>
+  </header>
+
+  <img id="mosquito" class="img-mosquito hidden" src="imagens/mosquito.png" alt="Mosquito">
+
+  <!-- TELA INICIAL -->
+  <section id="screen-start" class="flex flex-col items-center justify-center h-full w-full p-4 relative z-40 bg-slate-950/70 backdrop-blur-md">
+    <div class="max-w-md w-full bg-slate-900/90 border border-emerald-500/30 backdrop-blur-2xl rounded-3xl p-7 glow-card text-center space-y-5">
+      
+      <div class="inline-block p-4 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+        <i class="fa-solid fa-hand-pointer text-3xl animate-bounce"></i>
+      </div>
+      
+      <div class="space-y-1">
+        <h1 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 uppercase">
+          Mata Mosquito
+        </h1>
+        <p class="text-xs text-slate-400 font-medium">
+          Aproxime o polegar do indicador para esmagar!
+        </p>
+      </div>
+
+      <div class="text-left space-y-1.5">
+        <label for="input-nickname" class="block text-[11px] font-extrabold uppercase tracking-widest text-slate-300">
+          Seu Apelido
+        </label>
+        <div class="relative flex items-center">
+          <i class="fa-solid fa-user absolute left-4 text-slate-500 text-sm"></i>
+          <input type="text" id="input-nickname" maxlength="15" placeholder="Ex: Player1"
+                 class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-3 pl-11 pr-4 text-white placeholder-slate-600 focus:outline-none font-semibold text-sm">
+        </div>
+      </div>
+
+      <button id="btn-start" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 py-3.5 rounded-xl font-extrabold uppercase text-slate-950 text-sm glow-btn flex items-center justify-center gap-2 cursor-pointer">
+        <i class="fa-solid fa-camera"></i> Ativar Câmera e Jogar
+      </button>
+
+      <div class="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 text-left">
+        <div class="flex items-center justify-between mb-2 border-b border-slate-800/80 pb-2">
+          <h3 class="font-extrabold text-xs text-amber-400 flex items-center gap-2 uppercase">
+            <i class="fa-solid fa-trophy"></i> Top Caçadores
+          </h3>
+          <span id="start-ranking-source" class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded-full font-bold uppercase">
+            A carregar...
+          </span>
+        </div>
+
+        <ul id="start-ranking-list" class="space-y-1.5 overflow-y-auto custom-scroll text-xs max-h-[120px]">
+          <li class="text-center text-slate-500 py-2">Sem pontuações.</li>
+        </ul>
+      </div>
+
+      <p id="camera-status" class="text-xs text-emerald-400 font-semibold hidden flex items-center justify-center gap-2">
+        <i class="fa-solid fa-spinner animate-spin"></i> A inicializar IA da câmara...
+      </p>
+    </div>
+  </section>
+
+  <!-- TELA GAME OVER -->
+  <section id="screen-gameover" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-4">
+      <div class="space-y-1">
+        <div class="inline-flex p-3 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20">
+          <i class="fa-solid fa-skull-crossbones text-2xl"></i>
+        </div>
+        <h2 class="text-2xl font-black text-rose-500">FIM DE JOGO</h2>
+      </div>
+
+      <div class="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-1 text-xs">
+        <div class="flex justify-between items-center">
+          <span class="text-slate-400">Caçador:</span>
+          <span id="go-nickname" class="font-bold text-emerald-400">---</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-400">Mosquitos Eliminados:</span>
+          <span id="go-score" class="font-black text-lg text-amber-400">0</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3 text-left">
+        <div class="flex items-center justify-between mb-2 border-b border-slate-800 pb-1">
+          <h3 class="font-extrabold text-xs text-amber-400 uppercase">
+            <i class="fa-solid fa-trophy"></i> Ranking
+          </h3>
+          <span id="go-ranking-source" class="text-[10px] text-slate-500 uppercase font-bold">---</span>
+        </div>
+
+        <ul id="go-ranking-list" class="space-y-1 overflow-y-auto custom-scroll text-xs max-h-[120px]">
+          <li class="text-center text-slate-500 py-2">Sem dados</li>
+        </ul>
+      </div>
+
+      <p id="api-status" class="text-[11px] font-semibold text-slate-400 h-3"></p>
+
+      <button id="btn-restart" class="w-full bg-rose-600 hover:bg-rose-500 py-3 rounded-xl font-extrabold uppercase text-white text-xs flex items-center justify-center gap-2 cursor-pointer">
+        <i class="fa-solid fa-rotate-right"></i> Jogar Novamente
+      </button>
+    </div>
+  </section>
+
+  <!-- LÓGICA DE DETEÇÃO E JOGO OTIMIZADA -->
+  <script>
+    const API_URL = 'http://localhost:3000/api/pontuacoes';
+
+    const imgMosquito = document.getElementById("mosquito");
+    const virtualCursor = document.getElementById("virtual-cursor");
+    const videoElement = document.getElementById("webcam");
+
+    const screenStart = document.getElementById("screen-start");
+    const screenGameOver = document.getElementById("screen-gameover");
+    const hud = document.getElementById("hud");
+
+    const inputNickname = document.getElementById("input-nickname");
+    const btnStart = document.getElementById("btn-start");
+    const btnRestart = document.getElementById("btn-restart");
+
+    const hudNickname = document.getElementById("hud-nickname");
+    const hudScore = document.getElementById("hud-score");
+    const hudLives = document.getElementById("hud-lives");
+
+    const goNickname = document.getElementById("go-nickname");
+    const goScore = document.getElementById("go-score");
+    const apiStatus = document.getElementById("api-status");
+    const cameraStatus = document.getElementById("camera-status");
+
+    const startRankingList = document.getElementById("start-ranking-list");
+    const startRankingSource = document.getElementById("start-ranking-source");
+    const goRankingList = document.getElementById("go-ranking-list");
+    const goRankingSource = document.getElementById("go-ranking-source");
+
+    let gameState = {
+      nickname: 'Player',
+      score: 0,
+      misses: 0,
+      maxMisses: 3,
+      isPlaying: false,
+      mosquitoTimer: null,
+      isPinching: false,
+      canPinchAgain: true, // Garante que precisa de abrir os dedos para poder clicar de novo
+      cameraInstance: null,
+      handsInstance: null
+    };
+
+    window.addEventListener("DOMContentLoaded", () => {
+      carregarEExibirRanking(startRankingList, startRankingSource);
+    });
+
+    function onHandResults(results) {
+      if (!gameState.isPlaying || !results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        virtualCursor.classList.add("hidden");
+        gameState.isPinching = false;
+        gameState.canPinchAgain = true;
+        return;
+      }
+
+      const landmarks = results.multiHandLandmarks[0];
+      const indexTip = landmarks[8];
+      const thumbTip = landmarks[4];
+
+      if (!indexTip || !thumbTip) return;
+
+      virtualCursor.classList.remove("hidden");
+
+      // Coordenadas suavizadas
+      const pinchX = (indexTip.x + thumbTip.x) / 2;
+      const pinchY = (indexTip.y + thumbTip.y) / 2;
+
+      const screenX = (1 - pinchX) * window.innerWidth;
+      const screenY = pinchY * window.innerHeight;
+
+      virtualCursor.style.left = `${screenX}px`;
+      virtualCursor.style.top = `${screenY}px`;
+
+      // Distância Euclidiana entre Ponta do Polegar e Indicador
+      const dx = indexTip.x - thumbTip.x;
+      const dy = indexTip.y - thumbTip.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Limiares ajustados: < 0.08 = Dedos Fechados / > 0.11 = Dedos Abertos
+      if (distance < 0.08) {
+        virtualCursor.classList.add("clicking");
+
+        if (gameState.canPinchAgain) {
+          gameState.canPinchAgain = false; // Bloqueia até abrir a mão
+          executarCliqueVirtual(screenX, screenY);
+        }
+      } else if (distance > 0.11) {
+        virtualCursor.classList.remove("clicking");
+        gameState.canPinchAgain = true; // Reativa a capacidade de dar um novo clique
+      }
+    }
+
+    function executarCliqueVirtual(x, y) {
+      if (!gameState.isPlaying || imgMosquito.classList.contains("hidden")) return;
+
+      const rect = imgMosquito.getBoundingClientRect();
+      const MARGEM_HITBOX = 40; // Hitbox ampliada para facilitar a jogabilidade
+
+      const dentroX = x >= (rect.left - MARGEM_HITBOX) && x <= (rect.right + MARGEM_HITBOX);
+      const dentroY = y >= (rect.top - MARGEM_HITBOX) && y <= (rect.bottom + MARGEM_HITBOX);
+
+      if (dentroX && dentroY) {
+        eliminarMosquito();
+      }
+    }
+
+    function cicloMosquito() {
+      if (!gameState.isPlaying) return;
+
+      if (!imgMosquito.classList.contains("hidden")) {
+        registrarErro();
+        if (!gameState.isPlaying) return;
+      }
+
+      const topPos = Math.max(140, Math.floor(Math.random() * (window.innerHeight - 220)));
+      const leftPos = Math.max(60, Math.floor(Math.random() * (window.innerWidth - 180)));
+
+      imgMosquito.style.top = `${topPos}px`;
+      imgMosquito.style.left = `${leftPos}px`;
+      imgMosquito.classList.remove("hidden");
+    }
+
+    function eliminarMosquito() {
+      if (!gameState.isPlaying) return;
+
+      gameState.score += 1;
+      hudScore.textContent = gameState.score;
+
+      imgMosquito.classList.add("hidden");
+
+      // Reinicia temporizador
+      if (gameState.mosquitoTimer) clearInterval(gameState.mosquitoTimer);
+      
+      // Gera o próximo mosquito após 300ms para dar resposta visual
+      setTimeout(() => {
+        if (gameState.isPlaying) {
+          cicloMosquito();
+          gameState.mosquitoTimer = setInterval(cicloMosquito, 2800);
+        }
+      }, 300);
+    }
+
+    function registrarErro() {
+      gameState.misses += 1;
+      atualizarCoracoes();
+
+      if (gameState.misses >= gameState.maxMisses) {
+        encerrarJogo();
+      }
+    }
+
+    function atualizarCoracoes() {
+      let heartsHTML = '';
+      for (let i = 0; i < gameState.maxMisses; i++) {
+        if (i < gameState.maxMisses - gameState.misses) {
+          heartsHTML += '<i class="fa-solid fa-heart heart-drop-shadow"></i>';
+        } else {
+          heartsHTML += '<i class="fa-regular fa-heart opacity-30"></i>';
+        }
+      }
+      hudLives.innerHTML = heartsHTML;
+    }
+
+    imgMosquito.addEventListener("click", eliminarMosquito);
+
+    btnStart.addEventListener("click", async () => {
+      const name = inputNickname.value.trim();
+      gameState.nickname = name.length > 0 ? name : "Player";
+
+      cameraStatus.classList.remove("hidden");
+      btnStart.disabled = true;
+
+      try {
+        if (!gameState.handsInstance) {
+          gameState.handsInstance = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+          });
+
+          gameState.handsInstance.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+          });
+
+          gameState.handsInstance.onResults(onHandResults);
+        }
+
+        if (!gameState.cameraInstance) {
+          gameState.cameraInstance = new Camera(videoElement, {
+            onFrame: async () => {
+              if (gameState.isPlaying && gameState.handsInstance) {
+                await gameState.handsInstance.send({ image: videoElement });
+              }
+            },
+            width: 640,
+            height: 480
+          });
+          await gameState.cameraInstance.start();
+        }
+
+        iniciarPartida();
+      } catch (err) {
+        console.error("Erro na Câmara:", err);
+        alert("Erro ao aceder à câmara! Abra a página através do Live Server.");
+        btnStart.disabled = false;
+        cameraStatus.classList.add("hidden");
+      }
+    });
+
+    function iniciarPartida() {
+      gameState.score = 0;
+      gameState.misses = 0;
+      gameState.isPlaying = true;
+      gameState.canPinchAgain = true;
+
+      hudNickname.textContent = gameState.nickname;
+      hudScore.textContent = "0";
+      atualizarCoracoes();
+
+      screenStart.classList.add("hidden");
+      screenGameOver.classList.add("hidden");
+      hud.classList.remove("hidden");
+
+      if (gameState.mosquitoTimer) clearInterval(gameState.mosquitoTimer);
+      cicloMosquito();
+      gameState.mosquitoTimer = setInterval(cicloMosquito, 2800);
+    }
+
+    function encerrarJogo() {
+      gameState.isPlaying = false;
+      if (gameState.mosquitoTimer) clearInterval(gameState.mosquitoTimer);
+
+      imgMosquito.classList.add("hidden");
+      virtualCursor.classList.add("hidden");
+
+      goNickname.textContent = gameState.nickname;
+      goScore.textContent = gameState.score;
+
+      screenGameOver.classList.remove("hidden");
+
+      salvarESupervisionarRanking(gameState.nickname, gameState.score);
+    }
+
+    async function salvarESupervisionarRanking(nickname, pontos) {
+      apiStatus.textContent = "A guardar pontuação...";
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nickname, pontos })
+        });
+
+        if (response.ok) {
+          apiStatus.textContent = "Guardado no servidor!";
+          apiStatus.className = "text-[11px] font-semibold text-emerald-400";
+        }
+      } catch (e) {
+        apiStatus.textContent = "Guardado localmente (servidor off).";
+        apiStatus.className = "text-[11px] font-semibold text-slate-400";
+      }
+
+      salvarLocalmente(nickname, pontos);
+      carregarEExibirRanking(goRankingList, goRankingSource);
+    }
+
+    function salvarLocalmente(nickname, pontos) {
+      let ranking = JSON.parse(localStorage.getItem("mata_mosquito_ranking") || "[]");
+      ranking.push({ nickname, pontos, data: new Date().toISOString() });
+      ranking.sort((a, b) => b.pontos - a.pontos);
+      ranking = ranking.slice(0, 10);
+      localStorage.setItem("mata_mosquito_ranking", JSON.stringify(ranking));
+    }
+
+    async function carregarEExibirRanking(targetUl, targetSourceLabel) {
+      targetSourceLabel.textContent = "A CARREGAR...";
+      try {
+        const response = await fetch(API_URL);
+        if (response.ok) {
+          const dados = await response.json();
+          targetSourceLabel.textContent = "ONLINE";
+          renderizarRanking(dados, targetUl);
+          return;
+        }
+      } catch (e) {}
+
+      targetSourceLabel.textContent = "LOCAL";
+      const ranking = JSON.parse(localStorage.getItem("mata_mosquito_ranking") || "[]");
+      renderizarRanking(ranking, targetUl);
+    }
+
+    function renderizarRanking(lista, targetUl) {
+      if (!lista || lista.length === 0) {
+        targetUl.innerHTML = `<li class="text-center text-slate-500 py-2 font-medium">Sem pontuações.</li>`;
+        return;
+      }
+
+      lista.sort((a, b) => (b.pontos || b.score || 0) - (a.pontos || a.score || 0));
+
+      targetUl.innerHTML = lista.slice(0, 5).map((item, index) => {
+        const nome = item.nickname || item.nome || "Jogador";
+        const pts = item.pontos !== undefined ? item.pontos : (item.score || 0);
+
+        return `
+          <li class="flex items-center justify-between p-2 rounded-xl bg-slate-900/80">
+            <div class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded bg-slate-800 text-slate-400 flex items-center justify-center text-[10px] font-bold">${index + 1}</span>
+              <span class="font-semibold text-xs text-slate-200">${nome}</span>
+            </div>
+            <span class="font-bold text-amber-400 text-xs">${pts} pts</span>
+          </li>
+        `;
+      }).join('');
+    }
+
+    btnRestart.addEventListener("click", iniciarPartida);
+  </script>
+</body>
+</html>

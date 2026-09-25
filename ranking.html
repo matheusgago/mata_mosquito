@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mata Mosquito - Ranking Geral</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fontes Retro -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: radial-gradient(circle at center, #111827, #030712);
+        }
+        .fonte-arcade {
+            font-family: 'Press Start 2P', cursive;
+        }
+        .podio-glow-1 {
+            box-shadow: 0 0 20px rgba(234, 179, 8, 0.4);
+        }
+        .podio-glow-2 {
+            box-shadow: 0 0 15px rgba(209, 213, 219, 0.3);
+        }
+        .podio-glow-3 {
+            box-shadow: 0 0 15px rgba(217, 119, 6, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white flex flex-col justify-between p-4 md:p-8">
+
+    <!-- Cabeçalho -->
+    <header class="text-center my-6">
+        <h1 class="fonte-arcade text-yellow-400 text-2xl md:text-4xl tracking-widest drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] animate-pulse">
+            HALL DA FAMA
+        </h1>
+        <p class="text-gray-400 text-lg mt-2 font-bold uppercase tracking-wider">
+            Os maiores caçadores de mosquitos
+        </p>
+    </header>
+
+    <!-- Conteúdo Principal / Container do Ranking -->
+    <main class="max-w-4xl w-full mx-auto bg-gray-900/90 border-2 border-yellow-500/40 rounded-xl p-6 shadow-2xl backdrop-blur-md">
+        
+        <!-- Pódio (Top 3) -->
+        <div id="podio-container" class="grid grid-cols-3 gap-2 md:gap-4 mb-8 items-end min-h-[160px]">
+            <!-- Preenchido via JavaScript -->
+        </div>
+
+        <!-- Barra de Ações -->
+        <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-3">
+            <div class="flex items-center gap-3">
+                <span class="text-sm text-gray-400 uppercase font-bold">Classificação Geral</span>
+                <span id="badge-fonte" class="text-xs text-yellow-500 bg-yellow-950/40 px-2 py-1 rounded border border-yellow-500/30">A ligar...</span>
+            </div>
+            <button onclick="carregarRankingAPI()" class="bg-gray-800 hover:bg-gray-700 text-yellow-400 px-3 py-1.5 rounded border border-yellow-500/30 text-sm flex items-center gap-2 transition-all">
+                <span>🔄</span> Atualizar
+            </button>
+        </div>
+
+        <!-- Tabela do Ranking (Posições 4 em diante) -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-gray-400 border-b border-gray-800 text-sm md:text-base">
+                        <th class="py-3 px-4">#</th>
+                        <th class="py-3 px-4">Jogador</th>
+                        <th class="py-3 px-4 text-center">Pontos</th>
+                        <th class="py-3 px-4 text-right">Data</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-ranking-corpo">
+                    <tr>
+                        <td colspan="4" class="text-center py-8 text-gray-500">
+                            Carregando classificação...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Rodapé e Botão de Voltar -->
+    <footer class="text-center my-6">
+        <a href="index.html" class="inline-block bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:scale-105 transition-all border-b-4 border-red-900 uppercase tracking-wider">
+            ⬅️ Voltar ao Jogo
+        </a>
+    </footer>
+
+    <!-- Script de Integração com o Backend -->
+    <script>
+        const API_URL = 'http://localhost:3000/api/pontuacoes';
+
+        // BUSCAR PONTUAÇÕES DO BANCO DE DADOS
+        async function carregarRankingAPI() {
+            const badgeFonte = document.getElementById('badge-fonte');
+
+            try {
+                const resposta = await fetch(API_URL);
+                if (!resposta.ok) throw new Error('Falha na API');
+
+                const dados = await resposta.json();
+                
+                if (badgeFonte) {
+                    badgeFonte.textContent = 'Fonte: MySQL Conectado';
+                    badgeFonte.className = 'text-xs text-green-400 bg-green-950/40 px-2 py-1 rounded border border-green-500/30';
+                }
+
+                renderizarRanking(dados);
+
+            } catch (erro) {
+                console.warn('Backend indisponível:', erro);
+                
+                if (badgeFonte) {
+                    badgeFonte.textContent = 'Servidor Desconectado';
+                    badgeFonte.className = 'text-xs text-red-400 bg-red-950/40 px-2 py-1 rounded border border-red-500/30';
+                }
+
+                // Exibe tabela vazia (SEM NOMES FAKE) se o servidor estiver desligado
+                renderizarRanking([]);
+            }
+        }
+
+        // SALVAR A PONTUAÇÃO DO JOGADOR NO BANCO DE DADOS
+        async function salvarPontuacaoDoJogador(nickname, pontos) {
+            if (!nickname || nickname.trim() === '') return;
+
+            try {
+                const resposta = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nickname: nickname.trim(),
+                        pontos: pontos
+                    })
+                });
+
+                if (resposta.ok) {
+                    await carregarRankingAPI(); // Atualiza a lista na hora
+                }
+            } catch (erro) {
+                console.error('Erro ao enviar pontuação:', erro);
+            }
+        }
+
+        // RENDERIZAR OS DADOS NA TELA
+        function renderizarRanking(lista) {
+            const corpoTabela = document.getElementById('tabela-ranking-corpo');
+            const podioContainer = document.getElementById('podio-container');
+
+            corpoTabela.innerHTML = '';
+            podioContainer.innerHTML = '';
+
+            if (!lista || lista.length === 0) {
+                corpoTabela.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-8 text-gray-400">
+                            Nenhuma pontuação registrada ainda. Seja o primeiro!
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            // Top 3 (Pódio)
+            const top3 = lista.slice(0, 3);
+            const posicoesPodio = [
+                { pos: 2, cor: 'bg-gray-800 border-gray-400 text-gray-300', altura: 'h-32', glow: 'podio-glow-2', medalha: '🥈' },
+                { pos: 1, cor: 'bg-yellow-950/60 border-yellow-400 text-yellow-400', altura: 'h-40', glow: 'podio-glow-1', medalha: '👑 🥇' },
+                { pos: 3, cor: 'bg-amber-950/40 border-amber-600 text-amber-500', altura: 'h-28', glow: 'podio-glow-3', medalha: '🥉' }
+            ];
+
+            const ordemVisusal = [top3[1], top3[0], top3[2]];
+
+            ordemVisusal.forEach((jogador, index) => {
+                const config = posicoesPodio[index];
+                if (jogador) {
+                    podioContainer.innerHTML += `
+                        <div class="flex flex-col items-center ${config.pos === 1 ? 'order-2' : config.pos === 2 ? 'order-1' : 'order-3'}">
+                            <div class="text-center mb-1">
+                                <span class="text-xl">${config.medalha}</span>
+                                <p class="font-bold text-sm md:text-base truncate max-w-[90px] md:max-w-[120px] text-white">${sanitizar(jogador.nickname)}</p>
+                                <span class="text-xs font-bold text-green-400">${jogador.pontos} pts</span>
+                            </div>
+                            <div class="w-full ${config.altura} ${config.cor} ${config.glow} border-t-2 border-x rounded-t-lg flex items-center justify-center font-bold text-xl">
+                                ${config.pos}º
+                            </div>
+                        </div>`;
+                }
+            });
+
+            // Do 4º lugar em diante
+            const restoRanking = lista.slice(3);
+            if (restoRanking.length === 0 && lista.length <= 3) {
+                corpoTabela.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-gray-500 text-sm">
+                            Fim do ranking.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            restoRanking.forEach((item, index) => {
+                const posicao = index + 4;
+                const dataFormatada = item.data_formatada || (item.data_partida ? new Date(item.data_partida).toLocaleDateString('pt-BR') : '-');
+
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-gray-800 hover:bg-gray-800/50 transition-colors text-sm md:text-base';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-gray-400">${posicao}º</td>
+                    <td class="py-3 px-4 font-semibold text-white">${sanitizar(item.nickname)}</td>
+                    <td class="py-3 px-4 font-bold text-green-400 text-center">${item.pontos}</td>
+                    <td class="py-3 px-4 text-gray-400 text-right text-xs md:text-sm">${dataFormatada}</td>
+                `;
+                corpoTabela.appendChild(tr);
+            });
+        }
+
+        function sanitizar(texto) {
+            const div = document.createElement('div');
+            div.innerText = texto;
+            return div.innerHTML;
+        }
+
+        window.addEventListener('DOMContentLoaded', carregarRankingAPI);
+    </script>
+</body>
+</html>
